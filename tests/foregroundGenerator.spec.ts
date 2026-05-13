@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
 	generateAnsiForegrounds,
-	generateForegrounds,
 	generateForegroundSteps,
+	generateForegrounds,
 } from "../src/index.ts";
 
 describe("generateForegrounds", () => {

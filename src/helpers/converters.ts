@@ -54,8 +54,7 @@ export function labToRgb(L: number, a: number, b: number): RgbColor {
 
 	r = r > 0.0031308 ? 1.055 * r ** (1 / 2.4) - 0.055 : 12.92 * r;
 	g = g > 0.0031308 ? 1.055 * g ** (1 / 2.4) - 0.055 : 12.92 * g;
-	blue =
-		blue > 0.0031308 ? 1.055 * blue ** (1 / 2.4) - 0.055 : 12.92 * blue;
+	blue = blue > 0.0031308 ? 1.055 * blue ** (1 / 2.4) - 0.055 : 12.92 * blue;
 
 	return {
 		r: Math.round(Math.max(0, Math.min(255, r * 255))),

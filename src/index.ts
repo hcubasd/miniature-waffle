@@ -2,8 +2,8 @@ export { generateBackgrounds } from "./backgroundGenerator.js";
 export { matchAnsiColors, matchColors } from "./colorMatcher.js";
 export {
 	generateAnsiForegrounds,
-	generateForegrounds,
 	generateForegroundSteps,
+	generateForegrounds,
 } from "./foregroundGenerator.js";
 export { findPalettes } from "./paletteFinder.js";
 export type {
