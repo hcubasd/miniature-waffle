@@ -1,5 +1,5 @@
-import { labToRgb, rgbToLab } from "./helpers/converters.js";
 import { normalizeRgbColor, rgbToHex } from "./helpers/colorFormats.js";
+import { labToRgb, rgbToLab } from "./helpers/converters.js";
 import type {
 	ColorInput,
 	ColorReference,

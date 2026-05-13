@@ -21,7 +21,10 @@ describe("generateForegrounds", () => {
 			foregroundLab: { L: 75, a: 0, b: 0 },
 		});
 		expect(result.mappings[1]?.foregroundLab.L).toBe(0);
-		expect(result.mappings[2]?.foregroundLab.L).toBeCloseTo(35.069404394019585, 10);
+		expect(result.mappings[2]?.foregroundLab.L).toBeCloseTo(
+			35.069404394019585,
+			10,
+		);
 	});
 });
 

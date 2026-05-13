@@ -1,10 +1,10 @@
+import { normalizeRgbColor, rgbToHex } from "./helpers/colorFormats.js";
 import { rgbToLab } from "./helpers/converters.js";
 import { hungarian } from "./helpers/hungarian.js";
 import {
 	buildPaletteGeometries,
 	validatePolygonInputs,
 } from "./helpers/paletteGeometry.js";
-import { normalizeRgbColor, rgbToHex } from "./helpers/colorFormats.js";
 import type {
 	ColorInput,
 	HexColor,

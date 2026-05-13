@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildEvenGaps, buildUniqueGapSequences } from "../src/helpers/bresehham.ts";
+import {
+	buildEvenGaps,
+	buildUniqueGapSequences,
+} from "../src/helpers/bresehham.ts";
 import { labToRgb, rgbToLab } from "../src/helpers/converters.ts";
 import { getEffectiveCircleVertexCount } from "../src/helpers/paletteGeometry.ts";
 

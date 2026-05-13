@@ -1,12 +1,12 @@
-import { labToRgb } from "./converters.js";
+import type { CircleVertex, EffectiveCircleVertex } from "../types.js";
 import {
 	buildEvenIndices,
 	buildIndicesFromGaps,
 	buildUniqueGapSequences,
 } from "./bresehham.js";
 import { rgbToHex } from "./colorFormats.js";
+import { labToRgb } from "./converters.js";
 import { findRadius } from "./radiusFinder.js";
-import type { CircleVertex, EffectiveCircleVertex } from "../types.js";
 
 export const MAX_CIRCLE_VERTEX_COUNT = 256;
 export const ANCHOR_THETA = (3 * Math.PI) / 2;
