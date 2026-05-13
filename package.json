@@ -1,0 +1,19 @@
+{
+	"name": "miniature-waffle",
+	"version": "0.0.0",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"scripts": {
+		"test": "vitest",
+		"build": "tsc --rootDir src --outDir dist"
+	},
+	"files": [
+		"dist"
+	],
+	"devDependencies": {
+		"@tsconfig/node24": "^24.0.4",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.6"
+	}
+}
