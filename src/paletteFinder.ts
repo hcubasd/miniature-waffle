@@ -1,18 +1,24 @@
 import {
-	buildPaletteGeometries,
+	buildEffectiveCircleVertices,
 	validatePolygonInputs,
 } from "./helpers/paletteGeometry.js";
+import { buildEvenGaps, buildIndicesFromGaps } from "./helpers/bresehham.js";
 import type { HexColor } from "./types.js";
 
 /**
- * Return the RGB palettes induced by Bresenham-distributed n-vertex subsets of
- * the effective RGB-distinct circle at the given Lab lightness.
- *
- * For n > 1, palettes are deduplicated up to cyclic rotation.
+ * Return all rotations of the Bresenham-distributed n-color palette on the
+ * effective RGB-distinct circle at the given Lab lightness. Each entry is one
+ * rotation: index 0 starts at the anchor vertex, index 1 shifts by one
+ * position, and so on. The array length equals the effective circle size
+ * (256 for most lightness values).
  */
 export function findPalettes(L: number, n: number): HexColor[][] {
 	validatePolygonInputs(L, n);
-	return buildPaletteGeometries(L, n).map((palette) =>
-		palette.map((vertex) => vertex.hex),
+	const vertices = buildEffectiveCircleVertices(L);
+	const gaps = buildEvenGaps(vertices.length, n);
+	return vertices.map((_, startIndex) =>
+		buildIndicesFromGaps(vertices.length, gaps, startIndex).map(
+			(i) => vertices[i].hex,
+		),
 	);
 }
