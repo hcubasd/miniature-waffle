@@ -77,7 +77,9 @@ Behavior:
   the full unique circle palette
 - `findPalettes(L, 1)` returns one singleton palette per unique effective-circle
   color
-- `n > 1` palettes are deduplicated up to cyclic rotation
+- at the degenerate extremes `L = 0` and `L = 100` the effective circle
+  collapses to a single color (black or white); any positive integer `n` is
+  accepted and the returned palette contains `n` copies of that one color
 
 Example:
 
@@ -285,26 +287,40 @@ Applies `generateForegrounds` to the 16 ANSI colors:
 ]
 ```
 
-### `generateForegroundSteps(L, reference, count)`
+### `generateForegroundSteps(L, reference, count, saturation?)`
 
-Returns evenly spaced grayscale steps on the Lab `L` axis from the center `L`
-to the chosen reference endpoint.
+Returns evenly spaced grayscale steps on the Lab `L` axis from a start
+lightness to the chosen reference endpoint.
 
 - `L`: finite number in `[0, 100]`
 - `reference`: `"black"` or `"white"`
 - `count`: positive integer
+- `saturation`: optional finite number in `[0, 1]`, default `0`
+
+The `saturation` parameter shifts the start lightness toward the reference
+endpoint by a fraction of the gap between `L` and the reference:
+
+$$
+\text{startL} = L + \text{saturation} \times (L_r - L)
+$$
+
+where `L_r = 0` for `"black"` and `L_r = 100` for `"white"`. Steps are then
+evenly spaced from `startL` to `L_r`.
+
+At `saturation = 0` (default) the first step is exactly `L`, preserving the
+original behavior.
 
 For example:
 
 ```js
 generateForegroundSteps(75, "black", 3)
+// saturation defaults to 0, startL = 75
+// → L = 75, 37.5, 0
+
+generateForegroundSteps(75, "black", 3, 1/3)
+// startL = 75 + (1/3) * (0 - 75) = 50
+// → L = 50, 25, 0
 ```
-
-returns:
-
-1. the center at `L = 75`
-2. the midpoint at `L = 37.5`
-3. black at `L = 0`
 
 Return shape:
 
@@ -312,6 +328,7 @@ Return shape:
 {
   L: number,
   reference: "black" | "white",
+  saturation: number,
   count: number,
   foregrounds: ["#RRGGBB", ...],
   steps: [

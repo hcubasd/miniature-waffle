@@ -115,6 +115,7 @@ export interface ForegroundStep {
 export interface GenerateForegroundStepsResult {
 	L: number;
 	reference: ColorReference;
+	saturation: number;
 	count: number;
 	foregrounds: HexColor[];
 	steps: ForegroundStep[];

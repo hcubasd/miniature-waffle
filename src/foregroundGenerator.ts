@@ -94,16 +94,20 @@ function buildForegroundStepEntries(
 	L: number,
 	reference: ColorReference,
 	count: number,
+	saturation: number,
 ): ForegroundStep[] {
 	if (!Number.isInteger(count) || count <= 0) {
 		throw new RangeError("count must be a positive integer.");
 	}
 
 	const referenceL = reference === "black" ? 0 : 100;
+	const startL = L + saturation * (referenceL - L);
 
 	return Array.from({ length: count }, (_, index) => {
 		const stepL =
-			count === 1 ? L : L + ((referenceL - L) * index) / (count - 1);
+			count === 1
+				? startL
+				: startL + ((referenceL - startL) * index) / (count - 1);
 		const rgb = labToRgb(stepL, 0, 0);
 
 		return {
@@ -136,20 +140,30 @@ export function generateForegrounds(
 }
 
 /**
- * Return evenly spaced grayscale steps on the Lab L axis from the center
- * lightness L to the chosen reference endpoint.
+ * Return evenly spaced grayscale steps on the Lab L axis from the start
+ * lightness to the chosen reference endpoint.
+ *
+ * The optional `saturation` parameter (default `0`) shifts the start lightness
+ * toward the reference by a fraction: `startL = L + saturation * (referenceL - L)`.
+ * At `saturation = 0` (default) the first step is exactly `L`; at
+ * `saturation = 1` both start and end collapse to the reference endpoint.
  */
 export function generateForegroundSteps(
 	L: number,
 	reference: ColorReference,
 	count: number,
+	saturation = 0,
 ): GenerateForegroundStepsResult {
 	validateReferenceLightness(L, reference);
+	if (!Number.isFinite(saturation) || saturation < 0 || saturation > 1) {
+		throw new RangeError("saturation must be a finite number in [0, 1].");
+	}
 
-	const steps = buildForegroundStepEntries(L, reference, count);
+	const steps = buildForegroundStepEntries(L, reference, count, saturation);
 	return {
 		L,
 		reference,
+		saturation,
 		count,
 		foregrounds: steps.map((entry) => entry.foregroundColor),
 		steps,
