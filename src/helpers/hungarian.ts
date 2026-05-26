@@ -1,8 +1,4 @@
-/**
- * O(n^3) Hungarian algorithm (Kuhn-Munkres) for square cost matrices.
- *
- * Finds the minimum-cost perfect matching between n rows and n columns.
- */
+// O(n³) Kuhn-Munkres: minimum-cost perfect matching for square cost matrices.
 export function hungarian(cost: readonly (readonly number[])[]): {
 	total: number;
 	assignment: number[];

@@ -6,11 +6,12 @@ on:
 jobs:
   integrate:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [23.0, 24.0, 25.0, 26.0]
+    container: node:${{ matrix.node-version }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
       - run: npm ci
       - run: npm test -- --run
       - run: npm run build

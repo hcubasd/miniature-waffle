@@ -1,12 +1,4 @@
-/**
- * Given a CIE Lab L* value, compute the exact radius of the largest regular
- * 256-gon inscribed in the sRGB gamut on the constant-L* plane.
- *
- * The polygon is centered on the neutral L* axis and uses the fixed
- * orientation k = 0 on the -b axis, so vertex k sits at angle
- * 3π/2 + k * 2π / 256.
- */
-
+// Radius of the largest regular 256-gon (anchored at -b, k=0) inscribed in the sRGB gamut at lightness L.
 const N_VERTICES = 256;
 
 const XN = 0.95047;

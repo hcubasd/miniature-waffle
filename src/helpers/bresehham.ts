@@ -41,22 +41,6 @@ export function buildEvenGaps(
 	});
 }
 
-export function minimalRotation(sequence: readonly number[]): number[] {
-	let best = [...sequence];
-
-	for (let offset = 1; offset < sequence.length; offset++) {
-		const candidate = sequence.slice(offset).concat(sequence.slice(0, offset));
-
-		for (let index = 0; index < sequence.length; index++) {
-			if (candidate[index] === best[index]) continue;
-			if (candidate[index] < best[index]) best = candidate;
-			break;
-		}
-	}
-
-	return best;
-}
-
 export function buildIndicesFromGaps(
 	total: number,
 	gaps: readonly number[],
@@ -84,31 +68,4 @@ export function buildIndicesFromGaps(
 	}
 
 	return indices;
-}
-
-export function buildEvenIndices(
-	total: number,
-	parts: number,
-	start = 0,
-	phase = 0,
-): number[] {
-	return buildIndicesFromGaps(total, buildEvenGaps(total, parts, phase), start);
-}
-
-export function buildUniqueGapSequences(
-	total: number,
-	parts: number,
-): number[][] {
-	validateSpreadInputs(total, parts);
-
-	const unique = new Map<string, number[]>();
-	for (let phase = 0; phase < parts; phase++) {
-		const canonical = minimalRotation(buildEvenGaps(total, parts, phase));
-		const key = canonical.join(",");
-		if (!unique.has(key)) {
-			unique.set(key, canonical);
-		}
-	}
-
-	return [...unique.values()];
 }

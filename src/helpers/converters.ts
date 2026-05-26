@@ -45,7 +45,7 @@ export function labToRgb(L: number, a: number, b: number): RgbColor {
 	const zr = fz > delta ? fz ** 3 : 3 * deltaSq * (fz - 4 / 29);
 
 	const x = xr * 0.95047;
-	const y = yr * 1.0;
+	const y = yr;
 	const z = zr * 1.08883;
 
 	let r = x * 3.2404542 + y * -1.5371385 + z * -0.4985314;

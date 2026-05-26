@@ -12,11 +12,14 @@
 		"test": "vitest",
 		"build": "tsc --rootDir src --outDir dist"
 	},
+	"engines": {
+		"node": ">=23.0.0 <27"
+	},
 	"files": [
 		"dist"
 	],
 	"devDependencies": {
-		"@tsconfig/node24": "^24.0.4",
+		"@tsconfig/node23": "^23.0.4",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.6"
 	}

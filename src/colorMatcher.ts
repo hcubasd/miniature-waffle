@@ -1,187 +1,148 @@
-import { normalizeRgbColor, rgbToHex } from "./helpers/colorFormats.js";
-import { rgbToLab } from "./helpers/converters.js";
+import { buildEvenGaps, buildIndicesFromGaps } from "./helpers/bresehham.js";
+import { labToRgb, rgbToLab } from "./helpers/converters.js";
 import { hungarian } from "./helpers/hungarian.js";
-import {
-	buildPaletteGeometries,
-	validatePolygonInputs,
-} from "./helpers/paletteGeometry.js";
-import type {
-	ColorInput,
-	HexColor,
-	LabColor,
-	MatchColorsResult,
-	MatchInput,
-	NamedColor,
-	PaletteMatch,
-	RgbColor,
-} from "./types.js";
+import { findRadius } from "./helpers/radiusFinder.js";
+import type { ColorMatch, NamedColorMatch, RgbTuple } from "./types.js";
 
-const MATCH_EPSILON = 1e-9;
+const N = 256;
+const ANCHOR_THETA = (3 * Math.PI) / 2;
 
-const ANSI_COLORS = [
-	{ name: "red", color: "#800000" },
-	{ name: "green", color: "#008000" },
-	{ name: "yellow", color: "#808000" },
-	{ name: "blue", color: "#000080" },
-	{ name: "magenta", color: "#800080" },
-	{ name: "cyan", color: "#008080" },
-	{ name: "brightRed", color: "#FF0000" },
-	{ name: "brightGreen", color: "#00FF00" },
-	{ name: "brightYellow", color: "#FFFF00" },
-	{ name: "brightBlue", color: "#0000FF" },
-	{ name: "brightMagenta", color: "#FF00FF" },
-	{ name: "brightCyan", color: "#00FFFF" },
-] satisfies ReadonlyArray<NamedColor>;
+const ANSI_COLORS: { name: string; rgb: RgbTuple }[] = [
+	{ name: "black", rgb: [0, 0, 0] },
+	{ name: "red", rgb: [128, 0, 0] },
+	{ name: "green", rgb: [0, 128, 0] },
+	{ name: "yellow", rgb: [128, 128, 0] },
+	{ name: "blue", rgb: [0, 0, 128] },
+	{ name: "magenta", rgb: [128, 0, 128] },
+	{ name: "cyan", rgb: [0, 128, 128] },
+	{ name: "white", rgb: [192, 192, 192] },
+	{ name: "brightBlack", rgb: [128, 128, 128] },
+	{ name: "brightRed", rgb: [255, 0, 0] },
+	{ name: "brightGreen", rgb: [0, 255, 0] },
+	{ name: "brightYellow", rgb: [255, 255, 0] },
+	{ name: "brightBlue", rgb: [0, 0, 255] },
+	{ name: "brightMagenta", rgb: [255, 0, 255] },
+	{ name: "brightCyan", rgb: [0, 255, 255] },
+	{ name: "brightWhite", rgb: [255, 255, 255] },
+];
 
-interface NormalizedInput {
-	index: number;
-	name?: string;
-	rgb: RgbColor;
-	hex: HexColor;
-	lab: LabColor;
-	projectedLab: LabColor;
-}
+const ANSI_CHROMATIC_COLORS = ANSI_COLORS.filter(
+	({ rgb: [r, g, b] }) => !(r === g && g === b),
+);
 
-function normalizeInputColors(
-	colors: readonly ColorInput[],
-	L: number,
-	labels: readonly string[] = [],
-): NormalizedInput[] {
-	if (!Array.isArray(colors) || colors.length === 0) {
-		throw new RangeError("colors must be a non-empty array.");
+export function matchColors(colors: RgbTuple[], L: number): ColorMatch[] {
+	if (!Number.isFinite(L) || L <= 0 || L >= 100) {
+		throw new RangeError("L must be a finite number in (0, 100).");
+	}
+	const n = colors.length;
+	if (n < 1 || n > N) {
+		throw new RangeError(`colors must have between 1 and ${N} entries.`);
 	}
 
-	return colors.map((color, index) => {
-		const rgb = normalizeRgbColor(color);
-		if (rgb.r === rgb.g && rgb.g === rgb.b) {
-			throw new RangeError(
-				`Input color at index ${index} lies on the gray axis and cannot be matched.`,
-			);
+	const projected = colors.map(([r, g, b], i) => {
+		const lab = rgbToLab(r, g, b);
+		if (lab.a === 0 && lab.b === 0) {
+			throw new RangeError(`Color at index ${i} lies on the gray axis.`);
 		}
-
-		const lab = rgbToLab(rgb.r, rgb.g, rgb.b);
-		return {
-			index,
-			name: labels[index],
-			rgb,
-			hex: rgbToHex(rgb),
-			lab,
-			projectedLab: { L, a: lab.a, b: lab.b },
-		};
+		return { input: [r, g, b] as RgbTuple, a: lab.a, b: lab.b };
 	});
-}
 
-function planarDistance(pointA: LabColor, pointB: LabColor): number {
-	return Math.hypot(pointA.a - pointB.a, pointA.b - pointB.b);
-}
+	const radius = findRadius(L);
+	const circle = Array.from({ length: N }, (_, k) => {
+		const theta = ANCHOR_THETA + (k * 2 * Math.PI) / N;
+		return { a: radius * Math.cos(theta), b: radius * Math.sin(theta) };
+	});
 
-function paletteCostMatrix(
-	projectedInputs: readonly NormalizedInput[],
-	palette: ReturnType<typeof buildPaletteGeometries>[number],
-): number[][] {
-	return projectedInputs.map((input) =>
-		palette.map((vertex) => planarDistance(input.projectedLab, vertex.lab)),
-	);
-}
+	const gaps = buildEvenGaps(N, n);
 
-function pairMatch(
-	projectedInputs: readonly NormalizedInput[],
-	palette: ReturnType<typeof buildPaletteGeometries>[number],
-	assignment: readonly number[],
-	totalDistance: number,
-): PaletteMatch {
-	return {
-		totalDistance,
-		palette: palette.map((vertex) => vertex.hex),
-		pairing: assignment.map((paletteIndex, inputIndex) => {
-			const input = projectedInputs[inputIndex];
-			const vertex = palette[paletteIndex];
-			return {
-				inputIndex,
-				inputName: input.name,
-				inputColor: input.hex,
-				projectedLab: input.projectedLab,
-				paletteIndex,
-				paletteColor: vertex.hex,
-				paletteLab: vertex.lab,
-				distance: planarDistance(input.projectedLab, vertex.lab),
-			};
-		}),
-	};
-}
+	let bestTotal = Infinity;
+	let bestAssignment: number[] = [];
+	let bestStart = 0;
 
-/**
- * Match input RGB colors to the unique Bresenham n-gons at the given L by
- * projecting the inputs orthogonally onto the constant-L Lab plane and solving
- * the minimum-total-distance assignment for every candidate palette.
- */
-export function matchColors(
-	colors: readonly ColorInput[],
-	L: number,
-): MatchColorsResult {
-	const n = Array.isArray(colors) ? colors.length : 0;
-	validatePolygonInputs(L, n);
-
-	const projectedInputs = normalizeInputColors(colors, L);
-	const palettes = buildPaletteGeometries(L, n);
-
-	let bestTotal = Number.POSITIVE_INFINITY;
-	const matches: PaletteMatch[] = [];
-
-	for (const palette of palettes) {
-		const { total, assignment } = hungarian(
-			paletteCostMatrix(projectedInputs, palette),
+	for (let start = 0; start < N; start++) {
+		const indices = buildIndicesFromGaps(N, gaps, start);
+		const palette = indices.map((i) => circle[i]);
+		const cost = projected.map((p) =>
+			palette.map((v) => Math.hypot(p.a - v.a, p.b - v.b)),
 		);
-		const match = pairMatch(projectedInputs, palette, assignment, total);
-
-		if (total + MATCH_EPSILON < bestTotal) {
+		const { total, assignment } = hungarian(cost);
+		if (total < bestTotal) {
 			bestTotal = total;
-			matches.length = 0;
-			matches.push(match);
-		} else if (Math.abs(total - bestTotal) <= MATCH_EPSILON) {
-			matches.push(match);
+			bestAssignment = assignment;
+			bestStart = start;
 		}
 	}
 
-	const inputs: MatchInput[] = projectedInputs.map((input) => ({
-		index: input.index,
-		inputName: input.name,
-		inputColor: input.hex,
-		originalLab: input.lab,
-		projectedLab: input.projectedLab,
-	}));
+	const bestIndices = buildIndicesFromGaps(N, gaps, bestStart);
+	const paletteRgb: RgbTuple[] = bestIndices.map((i) => {
+		const { r, g, b } = labToRgb(L, circle[i].a, circle[i].b);
+		return [r, g, b];
+	});
 
-	return {
-		L,
-		n,
-		inputs,
-		matches,
-	};
+	return projected.map((p, i) => ({
+		input: p.input,
+		match: paletteRgb[bestAssignment[i]],
+	}));
 }
 
-/**
- * Match the 12 non-gray ANSI colors at the given L.
- */
-export function matchAnsiColors(L: number): MatchColorsResult {
-	const result = matchColors(
-		ANSI_COLORS.map((entry) => entry.color),
-		L,
-	);
+export function matchGrays(
+	input: number | RgbTuple[],
+	L: number,
+	reference: number,
+): RgbTuple[] {
+	if (!Number.isFinite(L) || L < 0 || L > 100) {
+		throw new RangeError("L must be a finite number in [0, 100].");
+	}
+	if (!Number.isFinite(reference) || reference < 0 || reference > 100) {
+		throw new RangeError("reference must be a finite number in [0, 100].");
+	}
+	if (L === reference) {
+		throw new RangeError("L and reference must not be equal.");
+	}
 
-	const names = ANSI_COLORS.map((entry) => entry.name);
-
-	return {
-		...result,
-		inputs: result.inputs.map((input, index) => ({
-			...input,
-			inputName: names[index],
-		})),
-		matches: result.matches.map((match) => ({
-			...match,
-			pairing: match.pairing.map((pair) => ({
-				...pair,
-				inputName: names[pair.inputIndex],
-			})),
-		})),
+	const toGray = (lc: number): RgbTuple => {
+		const mapped = L + (lc / 100) * (reference - L);
+		const { r, g, b } = labToRgb(mapped, 0, 0);
+		return [r, g, b];
 	};
+
+	if (Array.isArray(input)) {
+		return input.map(([r, g, b]) => {
+			const { L: lc } = rgbToLab(r, g, b);
+			return toGray(lc);
+		});
+	}
+
+	const n = input;
+	if (!Number.isInteger(n) || n < 1 || n > N) {
+		throw new RangeError(`n must be an integer in [1, ${N}].`);
+	}
+	if (n === 1) {
+		return [toGray(0)];
+	}
+	return Array.from({ length: n }, (_, i) => toGray((i / (n - 1)) * 100));
+}
+
+export function matchAnsiColors(L: number): NamedColorMatch[] {
+	return matchColors(
+		ANSI_CHROMATIC_COLORS.map((c) => c.rgb),
+		L,
+	).map((result, i) => ({
+		name: ANSI_CHROMATIC_COLORS[i].name,
+		match: result.match,
+	}));
+}
+
+export function matchAnsiGrays(
+	L: number,
+	reference: number,
+): NamedColorMatch[] {
+	return matchGrays(
+		ANSI_COLORS.map((c) => c.rgb),
+		L,
+		reference,
+	).map((match, i) => ({
+		name: ANSI_COLORS[i].name,
+		match,
+	}));
 }

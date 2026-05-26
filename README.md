@@ -1,555 +1,277 @@
 # miniature-waffle
 
-`miniature-waffle` is a TypeScript library for building, matching, and rasterizing
-discrete color structures derived from a regular polygon on the constant-lightness
-plane of CIE Lab.
+A TypeScript library for building perceptually-uniform color palettes and
+grayscale mappings from the CIE Lab color space.
 
-The repo now works with **two related circle notions**:
+The core idea: for a given lightness `L*`, inscribe the largest regular 256-gon
+on the constant-`L*` plane that fits inside the sRGB gamut. Subsets of that
+polygon are maximally spread color palettes. All public APIs return `[r, g, b]`
+tuples — Lab is internal machinery.
 
-1. **Internal circle** — always the exact regular **256-gon** in Lab used by the
-   closed-form geometry.
-2. **Effective circle** — the largest power-of-two subset of that 256-gon whose
-   RGB-quantized vertices are all distinct at the requested `L`. This is one of
-   `256, 128, 64, 32, 16, 8, 4, 2, 1`.
-
-All public RGB-facing modules operate on the **effective** circle, so for every
-`L` the library produces palettes made only of unique RGB colors.
-
-## Package exports
-
-The package ships compiled **ESM JavaScript** plus **`.d.ts` declarations** from
-`dist/`, while the source lives in `src/` as TypeScript.
-
-For local development:
+## Install
 
 ```sh
-npm install
-npm run build
+npm install miniature-waffle
 ```
 
-Public root export:
+## API
 
-```js
+```ts
 import {
   findPalettes,
   matchColors,
+  matchGrays,
   matchAnsiColors,
-  generateBackgrounds,
-  generateForegrounds,
-  generateAnsiForegrounds,
-  generateForegroundSteps,
+  matchAnsiGrays,
 } from "miniature-waffle";
 ```
 
-This package intentionally exposes a **single public entry point**. Internal
-module layout is not part of the public API.
+All channel values are integers in `[0, 255]`. `RgbTuple` is `[r, g, b]`.
 
-## What the library does
-
-The current public capabilities are:
-
-1. **Palette generation** — generate unique RGB palettes from Bresenham-distributed
-   `n`-gons on the effective circle.
-2. **Palette matching** — project input RGB colors onto the constant-`L` Lab
-   plane and match them to the best palette using the Hungarian algorithm.
-3. **Background generation** — generate one in-memory RGBA background per
-   effective-circle start vertex.
-4. **Foreground generation** — map input colors or evenly spaced steps to the
-   Lab gray axis under a black/white endpoint convention.
-
-Lab is internal machinery; all public colors are RGB-facing.
-
-## Public API
+---
 
 ### `findPalettes(L, n)`
 
-Returns the RGB palettes induced by Bresenham-distributed `n`-vertex subsets of
-the **effective** circle at lightness `L`.
+Returns all 256 rotations of an `n`-color palette at lightness `L`.
 
-- `L`: finite number in `[0, 100]`
-- `n`: integer in `[1, effective circle size at L]`
-- return type: `string[][]`
-- each color is `#RRGGBB`
-
-Behavior:
-
-- if the effective circle at `L` has size `m`, then `findPalettes(L, m)` returns
-  the full unique circle palette
-- `findPalettes(L, 1)` returns one singleton palette per unique effective-circle
-  color
-- at the degenerate extremes `L = 0` and `L = 100` the effective circle
-  collapses to a single color (black or white); any positive integer `n` is
-  accepted and the returned palette contains `n` copies of that one color
-
-Example:
-
-```js
-const palettes = findPalettes(75, 3);
+```ts
+findPalettes(L: number, n: number): RgbTuple[][]
 ```
+
+- `L` — finite number in `(0, 100)` exclusive
+- `n` — integer in `[1, 256]`
+
+Each palette is a Bresenham-distributed `n`-gon on the 256-gon at `L`. The 256
+returned palettes are cyclic rotations of the same gap pattern — consecutive
+palettes are offset by one step around the circle.
+
+```ts
+const palettes = findPalettes(50, 3);
+// 256 palettes, each with 3 RgbTuples
+const [r, g, b] = palettes[0][0]; // first color of first palette
+```
+
+---
 
 ### `matchColors(colors, L)`
 
-Matches a set of input colors against all unique `n`-gon palettes at lightness
-`L`, where `n = colors.length`.
+Matches a set of input colors to the best-fit palette on the constant-`L` plane
+using the Hungarian algorithm.
 
-Accepted input formats:
-
-- `#RRGGBB`
-- `[r, g, b]`
-- `{ r, g, b }`
-
-Each channel must be an integer in `[0, 255]`.
-
-The input count must satisfy:
-
-```text
-1 <= colors.length <= effective circle size at L
+```ts
+matchColors(colors: RgbTuple[], L: number): ColorMatch[]
 ```
 
-Return shape:
+- `colors` — 1 to 256 entries; no color may lie on the Lab gray axis
+- `L` — finite number in `(0, 100)` exclusive
 
-```js
-{
-  L: number,
-  n: number,
-  inputs: [
-    {
-      index: number,
-      inputName?: string,
-      inputColor: "#RRGGBB",
-      originalLab: { L: number, a: number, b: number },
-      projectedLab: { L: number, a: number, b: number }
-    }
-  ],
-  matches: [
-    {
-      totalDistance: number,
-      palette: ["#RRGGBB", ...],
-      pairing: [
-        {
-          inputIndex: number,
-          inputName?: string,
-          inputColor: "#RRGGBB",
-          projectedLab: { L: number, a: number, b: number },
-          paletteIndex: number,
-          paletteColor: "#RRGGBB",
-          paletteLab: { L: number, a: number, b: number },
-          distance: number
-        }
-      ]
-    }
-  ]
+For each input color the algorithm:
+
+1. Converts to Lab and reads off `(a, b)`, discarding the input's own lightness
+2. Builds every Bresenham-distributed `n`-gon palette on the 256-gon at `L`
+3. Runs the Hungarian algorithm on each rotation and keeps the one with minimum
+   total `(a, b)`-plane distance
+4. Returns the matched palette color for each input
+
+```ts
+interface ColorMatch {
+  input: RgbTuple;  // the original input color
+  match: RgbTuple;  // the palette color assigned to it
 }
 ```
 
-If multiple palettes tie for minimum total distance, all are returned.
+Colors with `a = b = 0` in Lab (pure black `[0, 0, 0]`) throw a `RangeError`.
 
-Degenerate case:
+```ts
+const results = matchColors([[255, 0, 0], [0, 128, 255]], 75);
+results[0].input;  // [255, 0, 0]
+results[0].match;  // closest palette color at L=75
+```
 
-- if any input color lies on the RGB gray axis `(i, i, i)`, matching throws
+---
+
+### `matchGrays(input, L, reference)`
+
+Maps colors or evenly-spaced steps onto the Lab gray axis between `L` and
+`reference`.
+
+```ts
+matchGrays(input: number | RgbTuple[], L: number, reference: number): RgbTuple[]
+```
+
+- `L` — finite number in `[0, 100]`
+- `reference` — finite number in `[0, 100]`, must differ from `L`
+
+`L` is the dark endpoint, `reference` is the light endpoint. A color's input
+luminance `L*_in ∈ [0, 100]` maps linearly to the output range:
+
+$$
+L_{\text{out}} = L + \frac{L^*_{\text{in}}}{100} \cdot (\text{reference} - L)
+$$
+
+**Step mode** — `input` is an integer `n ∈ [1, 256]`: returns `n` neutral grays
+evenly spaced from `L` (at `L*_in = 0`) to `reference` (at `L*_in = 100`).
+
+```ts
+matchGrays(2, 0, 100);   // [[0,0,0], [255,255,255]]
+matchGrays(2, 100, 0);   // [[255,255,255], [0,0,0]]
+matchGrays(5, 20, 80);   // 5 grays spanning L*=20 to L*=80
+```
+
+**Projection mode** — `input` is a `RgbTuple[]`: extracts each color's
+luminance `L*_in` via `rgbToLab`, maps it with the formula above, returns
+`(L_out, 0, 0)` as RGB.
+
+```ts
+matchGrays([[255, 0, 0], [0, 128, 0]], 0, 100);
+// red and green projected to grays at their respective luminances
+```
+
+---
 
 ### `matchAnsiColors(L)`
 
-Applies `matchColors` to the 12 non-gray ANSI colors:
+Applies `matchColors` to the 12 chromatic ANSI terminal colors at lightness `L`.
 
-```js
-[
-  { name: "red", color: "#800000" },
-  { name: "green", color: "#008000" },
-  { name: "yellow", color: "#808000" },
-  { name: "blue", color: "#000080" },
-  { name: "magenta", color: "#800080" },
-  { name: "cyan", color: "#008080" },
-  { name: "brightRed", color: "#FF0000" },
-  { name: "brightGreen", color: "#00FF00" },
-  { name: "brightYellow", color: "#FFFF00" },
-  { name: "brightBlue", color: "#0000FF" },
-  { name: "brightMagenta", color: "#FF00FF" },
-  { name: "brightCyan", color: "#00FFFF" }
-]
+```ts
+matchAnsiColors(L: number): NamedColorMatch[]
 ```
 
-This requires the effective circle size at `L` to be at least `12`; otherwise it
-throws for the same reason `matchColors` would.
-
-### `generateBackgrounds(L, width, height, options?)`
-
-Generates one in-memory RGBA image per effective-circle vertex.
-
-- `L`: finite number in `[0, 100]`
-- `width`: positive integer
-- `height`: positive integer
-- `options.seed`: optional integer seed for reproducible randomness
-
-Return shape:
-
-```js
-[
-  {
-    index: number,
-    width: number,
-    height: number,
-    startVertexIndex: number,
-    startColor: "#RRGGBB",
-    bandCount: number,
-    bands: [
-      {
-        bandIndex: number,
-        yStart: number,
-        yEnd: number,
-        height: number,
-        vertexIndex: number,
-        nominalColor: "#RRGGBB",
-        windowSize: number
-      }
-    ],
-    data: Uint8ClampedArray
-  }
-]
-```
-
-Behavior:
-
-- if the effective circle size at `L` is `m`, the function returns **`m`**
-  images, not always 256
-- image `0` uses the `+a` vertex on the bottom band
-- subsequent images rotate that bottom-band start through all effective-circle
-  vertices
-- `bandCount = min(height, effective circle size)`
-- if `height >= effective circle size`, extra scanlines are spread evenly across
-  those bands
-- within each band, pixels are sampled from the nominal band color plus the
-  colors above it, using triangular weights over a logarithmic window size
-- `data` is RGBA row-major image data suitable for `ImageData`, canvas, WebGL,
-  or custom PNG encoding
-
-### `generateForegrounds(colors, L, reference)`
-
-Projects input colors onto the Lab gray axis.
-
-- `colors`: non-empty array of colors in any accepted RGB format
-- `L`: finite number in `[0, 100]`
-- `reference`: `"black"` or `"white"`
-
-For each input color:
-
-1. convert to Lab
-2. keep only its scalar Lab lightness `L_in`
-3. map `L_in` linearly so:
-   - original black maps to the requested center `L`
-   - original white maps to black if `reference = "black"`
-   - original white maps to white if `reference = "white"`
-4. convert `(L_out, 0, 0)` back to RGB
-
-Return shape:
-
-```js
-{
-  L: number,
-  reference: "black" | "white",
-  foregrounds: ["#RRGGBB", ...],
-  mappings: [
-    {
-      index: number,
-      inputName?: string,
-      inputColor: "#RRGGBB",
-      originalLab: { L: number, a: number, b: number },
-      projectedL: number,
-      foregroundLab: { L: number, a: number, b: number },
-      foregroundColor: "#RRGGBB"
-    }
-  ]
+```ts
+interface NamedColorMatch {
+  name: string;
+  match: RgbTuple;
 }
 ```
 
-### `generateAnsiForegrounds(L, reference)`
+The 12 colors (the 4 neutral grays — black, white, brightBlack, brightWhite —
+are excluded since they lie on the gray axis):
 
-Applies `generateForegrounds` to the 16 ANSI colors:
+| name | original |
+|---|---|
+| red | `[128, 0, 0]` |
+| green | `[0, 128, 0]` |
+| yellow | `[128, 128, 0]` |
+| blue | `[0, 0, 128]` |
+| magenta | `[128, 0, 128]` |
+| cyan | `[0, 128, 128]` |
+| brightRed | `[255, 0, 0]` |
+| brightGreen | `[0, 255, 0]` |
+| brightYellow | `[255, 255, 0]` |
+| brightBlue | `[0, 0, 255]` |
+| brightMagenta | `[255, 0, 255]` |
+| brightCyan | `[0, 255, 255]` |
 
-```js
-[
-  { name: "black", color: "#000000" },
-  { name: "red", color: "#800000" },
-  { name: "green", color: "#008000" },
-  { name: "yellow", color: "#808000" },
-  { name: "blue", color: "#000080" },
-  { name: "magenta", color: "#800080" },
-  { name: "cyan", color: "#008080" },
-  { name: "white", color: "#C0C0C0" },
-  { name: "brightBlack", color: "#808080" },
-  { name: "brightRed", color: "#FF0000" },
-  { name: "brightGreen", color: "#00FF00" },
-  { name: "brightYellow", color: "#FFFF00" },
-  { name: "brightBlue", color: "#0000FF" },
-  { name: "brightMagenta", color: "#FF00FF" },
-  { name: "brightCyan", color: "#00FFFF" },
-  { name: "brightWhite", color: "#FFFFFF" }
-]
+---
+
+### `matchAnsiGrays(L, reference)`
+
+Applies `matchGrays` (projection mode) to all 16 ANSI terminal colors.
+
+```ts
+matchAnsiGrays(L: number, reference: number): NamedColorMatch[]
 ```
 
-### `generateForegroundSteps(L, reference, count, saturation?)`
+Returns 16 `NamedColorMatch` entries in ANSI order (black → … → brightWhite),
+each mapped to a neutral gray at its luminance within `[L, reference]`.
 
-Returns evenly spaced grayscale steps on the Lab `L` axis from a start
-lightness to the chosen reference endpoint.
-
-- `L`: finite number in `[0, 100]`
-- `reference`: `"black"` or `"white"`
-- `count`: positive integer
-- `saturation`: optional finite number in `[0, 1]`, default `0`
-
-The `saturation` parameter shifts the start lightness toward the reference
-endpoint by a fraction of the gap between `L` and the reference:
-
-$$
-\text{startL} = L + \text{saturation} \times (L_r - L)
-$$
-
-where `L_r = 0` for `"black"` and `L_r = 100` for `"white"`. Steps are then
-evenly spaced from `startL` to `L_r`.
-
-At `saturation = 0` (default) the first step is exactly `L`, preserving the
-original behavior.
-
-For example:
-
-```js
-generateForegroundSteps(75, "black", 3)
-// saturation defaults to 0, startL = 75
-// → L = 75, 37.5, 0
-
-generateForegroundSteps(75, "black", 3, 1/3)
-// startL = 75 + (1/3) * (0 - 75) = 50
-// → L = 50, 25, 0
+```ts
+matchAnsiGrays(0, 100);
+// black → [0,0,0], brightWhite → [255,255,255], colors in between by luminance
 ```
 
-Return shape:
-
-```js
-{
-  L: number,
-  reference: "black" | "white",
-  saturation: number,
-  count: number,
-  foregrounds: ["#RRGGBB", ...],
-  steps: [
-    {
-      index: number,
-      foregroundLab: { L: number, a: number, b: number },
-      foregroundColor: "#RRGGBB"
-    }
-  ]
-}
-```
-
-## Repo structure
-
-```text
-src/
-  backgroundGenerator.ts
-  colorMatcher.ts
-  foregroundGenerator.ts
-  index.ts
-  paletteFinder.ts
-  helpers/
-    bresehham.ts
-    colorFormats.ts
-    converters.ts
-    hungarian.ts
-    paletteGeometry.ts
-    radiusFinder.ts
-  types.ts
-```
-
-- `src/paletteFinder.ts`: public palette-generation logic
-- `src/colorMatcher.ts`: public palette-matching logic
-- `src/backgroundGenerator.ts`: public in-memory background generator logic
-- `src/foregroundGenerator.ts`: public grayscale foreground generator logic
-- `src/index.ts`: root package exports
-- `src/helpers/radiusFinder.ts`: exact internal 256-gon radius solver
-- `src/helpers/paletteGeometry.ts`: internal/effective circle logic and palette
-  geometry
-- `src/helpers/bresehham.ts`: evenly distributed integer-spacing logic
-- `src/helpers/colorFormats.ts`: shared RGB/hex normalization helpers
-- `src/helpers/hungarian.ts`: minimum-cost bipartite assignment
-- `src/helpers/converters.ts`: RGB/Lab conversion helpers
-- `src/types.ts`: public and internal shared TypeScript types
+---
 
 ## Mathematical model
 
-### 1. Internal exact 256-gon
+### 1. The 256-gon and its radius
 
-Fix a Lab lightness `L*`. The internal circle is the regular 256-gon
+Fix a Lab lightness $L^*$. The library uses the regular 256-gon centered on the
+neutral axis, anchored at angle $\frac{3\pi}{2}$ (the $-b$ direction):
 
 $$
-v_k(r) = \left(L^\*,\; r(L^\*) \cos \theta_k,\; r(L^\*) \sin \theta_k\right),
+v_k = \left(L^*,\; r(L^*)\cos\theta_k,\; r(L^*)\sin\theta_k\right),
 \qquad
 \theta_k = \frac{3\pi}{2} + \frac{2\pi k}{256},
-\qquad
-k = 0, \dots, 255.
+\qquad k = 0,\dots,255.
 $$
 
-Its radius is
+The radius is the largest value such that all 256 vertices remain inside sRGB:
 
 $$
-r(L^\*) =
-\min_{0 \le k < 256}
-\sup \left\{ r \ge 0 : v_k(r) \text{ maps into sRGB} \right\}.
+r(L^*) = \min_{0 \le k < 256} \sup\!\left\{ r \ge 0 : v_k(r) \in \text{sRGB} \right\}.
 $$
 
-The radius computation is exact for this 256-direction model: it handles the
-piecewise Lab inverse explicitly, solves polynomial channel boundaries in closed
-form, and does not use numerical optimization to choose the radius at a given
-`L`.
+Each per-direction boundary is found in closed form. The Lab → linear RGB
+pipeline is piecewise cubic in `r` (the $f^{-1}$ branches of the CIE
+piecewise function composed with the sRGB matrix). The solver finds all
+polynomial roots in each piecewise interval and picks the smallest crossing.
 
-### 2. Effective RGB-distinct circle
+### 2. Bresenham n-gons
 
-The public library does not always expose all 256 internal vertices. Instead it
-chooses the largest power-of-two subset of the internal 256-gon whose
-RGB-quantized colors are all distinct:
-
-$$
-256,\;128,\;64,\;32,\;16,\;8,\;4,\;2,\;1.
-$$
-
-Starting from 256, the subset is halved until uniqueness holds. This makes the
-RGB-facing APIs well-defined even at extreme lightness values such as `L = 0`
-and `L = 100`, where many internal Lab vertices collapse to the same RGB color.
-
-### 3. Bresenham polygons on the effective circle
-
-If the effective circle size is `m`, then for any requested
+To build an `n`-color palette from the 256 vertices, the library uses
+integer-ratio gap spacing. If
 
 $$
-n \in \{1, \dots, m\},
+256 = qn + s, \qquad q = \left\lfloor \frac{256}{n} \right\rfloor, \qquad 0 \le s < n,
 $$
 
-the library builds `n`-vertex subsets using evenly distributed cyclic gaps. If
+then the gap sequence has $n - s$ gaps of size $q$ and $s$ gaps of size $q + 1$.
+All 256 rotations of this pattern give the 256 palettes returned by
+`findPalettes`.
+
+### 3. Hungarian matching
+
+Given $n$ input colors projected to $(a_i, b_i)$ on the constant-$L^*$ plane,
+and a candidate palette $\{v_0, \dots, v_{n-1}\}$, the cost matrix is the
+planar Lab distance:
 
 $$
-m = qn + s,
-\qquad
-q = \left\lfloor \frac{m}{n} \right\rfloor,
-\qquad
-0 \le s < n,
+d_{ij} = \sqrt{(a_i - a_j)^2 + (b_i - b_j)^2}.
 $$
 
-then the gap sizes lie in `{q, q + 1}` with exactly `s` larger gaps. The shared
-`bresehham.js` helper implements this integer distribution and is reused for:
+The Hungarian algorithm (Kuhn–Munkres, $O(n^3)$) finds the assignment
+$\sigma : [n] \to [n]$ minimising $\sum_i d_{i,\sigma(i)}$.
+`matchColors` runs this over all 256 rotations and returns the assignment
+from the rotation with the smallest total cost.
 
-- palette vertex selection
-- background band-height distribution
+### 4. Gray mapping
 
-### 4. Matching formulation
-
-Given input RGB colors
-
-$$
-c_0, \dots, c_{n-1},
-$$
-
-the matcher converts each color to Lab,
+The gray mapping in `matchGrays` is a linear remap of a color's Lab lightness
+$L^*_{\text{in}} \in [0, 100]$ into the requested range $[L, \text{reference}]$:
 
 $$
-c_i \mapsto \left(L_i^\*, a_i, b_i\right),
+L_{\text{out}} = L + \frac{L^*_{\text{in}}}{100} \cdot (\text{reference} - L).
 $$
 
-then projects onto the requested constant-`L*` plane:
+The output color is the neutral Lab point $(L_{\text{out}}, 0, 0)$ converted
+back to sRGB. For step mode with $n$ steps, the input luminances are
+$0, \frac{100}{n-1}, \frac{200}{n-1}, \dots, 100$ (i.e. $\frac{100i}{n-1}$ for
+$i = 0, \dots, n-1$), with $n = 1$ returning just $L_{\text{out}} = L$.
 
-$$
-\pi_L(c_i) = \left(L^\*, a_i, b_i\right).
-$$
+## Repo structure
 
-For each candidate palette
+```
+src/
+  index.ts             — public entry point
+  paletteFinder.ts     — findPalettes
+  colorMatcher.ts      — matchColors, matchGrays, matchAnsiColors, matchAnsiGrays
+  types.ts             — RgbTuple, ColorMatch, NamedColorMatch (+ internal Lab/Rgb)
+  helpers/
+    radiusFinder.ts    — exact 256-gon radius via polynomial root-finding
+    bresehham.ts       — Bresenham integer gap distribution
+    hungarian.ts       — O(n³) Kuhn-Munkres assignment
+    converters.ts      — sRGB ↔ CIE Lab
+tests/
+  paletteFinder.spec.ts
+  colorMatcher.spec.ts
+  helpers.spec.ts
+```
 
-$$
-P = \{v_0, \dots, v_{n-1}\},
-$$
+## Development
 
-the cost matrix is the planar Lab distance
-
-$$
-d_{ij} = \sqrt{(a_i - a(v_j))^2 + (b_i - b(v_j))^2}.
-$$
-
-The library runs the Hungarian algorithm on that `n × n` matrix and returns all
-minimum-cost matches in case of ties.
-
-### 5. Background formulation
-
-If the effective circle size at `L` is `m`, then `generateBackgrounds` returns
-`m` images.
-
-Each image uses
-
-$$
-b = \min(\text{height}, m)
-$$
-
-horizontal bands.
-
-- if `height >= m`, extra scanlines are spread across the `m` bands
-- if `height < m`, the band colors come from an anchored regular `height`-gon on
-  the effective circle
-
-Within each band, pixels are sampled from the nominal color plus the colors
-above it, using a window size
-
-$$
-\min\left(
-\mathrm{round}\left(\ln(A + (e - 1))\right),
-\text{available colors above}
-\right),
-$$
-
-where `A = width × bandHeight`.
-
-### 6. Foreground formulation
-
-Given an input color with Lab lightness `L_in`, the foreground generator ignores
-chromaticity and remaps only the scalar lightness.
-
-For a chosen center lightness `L_c` and reference endpoint `L_r`,
-
-$$
-L_r =
-\begin{cases}
-0, & \text{if reference is black} \\\\
-100, & \text{if reference is white}
-\end{cases}
-$$
-
-the mapped foreground lightness is
-
-$$
-L_{\text{out}} =
-\max\left(
-0,
-\min\left(
-100,
-L_c + \frac{L_r - L_c}{100} L_{\text{in}}
-\right)
-\right).
-$$
-
-The output RGB foreground is then the neutral Lab point
-
-$$
-\left(L_{\text{out}}, 0, 0\right)
-$$
-
-converted back to RGB.
-
-## Current project state
-
-This repo is now centered on the following end state:
-
-**an exact internal Lab 256-gon, plus RGB-facing public APIs that automatically
-collapse to the largest unique effective circle available at the requested
-lightness.**
-
-That means:
-
-- the underlying geometry stays mathematically exact at 256 directions
-- the public outputs stay RGB-distinct
-- low- and high-lightness edge cases are handled by the same model, without
-  special-case hacks
+```sh
+npm install
+npm test          # vitest
+npm run build     # tsc → dist/
+```

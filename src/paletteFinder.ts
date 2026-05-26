@@ -1,34 +1,34 @@
-import {
-	buildEffectiveCircleVertices,
-	validatePolygonInputs,
-} from "./helpers/paletteGeometry.js";
 import { buildEvenGaps, buildIndicesFromGaps } from "./helpers/bresehham.js";
-import type { HexColor } from "./types.js";
+import { labToRgb } from "./helpers/converters.js";
+import { findRadius } from "./helpers/radiusFinder.js";
+import type { RgbTuple } from "./types.js";
 
-/**
- * Return all rotations of the Bresenham-distributed n-color palette on the
- * effective RGB-distinct circle at the given Lab lightness. Each entry is one
- * rotation: index 0 starts at the anchor vertex, index 1 shifts by one
- * position, and so on. The array length equals the effective circle size
- * (256 for most lightness values).
- *
- * At the degenerate extremes L=0 and L=100 the effective circle collapses to
- * a single color (black or white). Any positive integer n is accepted there;
- * the returned palette contains n copies of that one color.
- */
-export function findPalettes(L: number, n: number): HexColor[][] {
-	const vertices = buildEffectiveCircleVertices(L);
-	if (vertices.length === 1) {
-		if (!Number.isInteger(n) || n < 1) {
-			throw new RangeError("n must be a positive integer.");
-		}
-		return [Array.from({ length: n }, () => vertices[0].hex)];
+const N = 256;
+const ANCHOR_THETA = (3 * Math.PI) / 2;
+
+export function findPalettes(L: number, n: number): RgbTuple[][] {
+	if (!Number.isFinite(L) || L <= 0 || L >= 100) {
+		throw new RangeError("L must be a finite number in (0, 100).");
 	}
-	validatePolygonInputs(L, n, vertices.length);
-	const gaps = buildEvenGaps(vertices.length, n);
-	return vertices.map((_, startIndex) =>
-		buildIndicesFromGaps(vertices.length, gaps, startIndex).map(
-			(i) => vertices[i].hex,
-		),
+	if (!Number.isInteger(n) || n < 1 || n > N) {
+		throw new RangeError(`n must be an integer in [1, ${N}].`);
+	}
+
+	const radius = findRadius(L);
+
+	const vertices: RgbTuple[] = Array.from({ length: N }, (_, k) => {
+		const theta = ANCHOR_THETA + (k * 2 * Math.PI) / N;
+		const { r, g, b } = labToRgb(
+			L,
+			radius * Math.cos(theta),
+			radius * Math.sin(theta),
+		);
+		return [r, g, b];
+	});
+
+	const gaps = buildEvenGaps(N, n);
+
+	return Array.from({ length: N }, (_, start) =>
+		buildIndicesFromGaps(N, gaps, start).map((i) => vertices[i]),
 	);
 }
