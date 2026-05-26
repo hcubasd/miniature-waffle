@@ -106,7 +106,7 @@ matchGrays(input: number | RgbTuple[], L: number, reference: number): RgbTuple[]
 luminance `L*_in ∈ [0, 100]` maps linearly to the output range:
 
 $$
-L_{\text{out}} = L + \frac{L^*_{\text{in}}}{100} \cdot (\text{reference} - L)
+L_{\text{out}} = L + \frac{L^{*}_{\text{in}}}{100} \cdot (\text{reference} - L)
 $$
 
 **Step mode** — `input` is an integer `n ∈ [1, 256]`: returns `n` neutral grays
@@ -186,11 +186,11 @@ matchAnsiGrays(0, 100);
 
 ### 1. The 256-gon and its radius
 
-Fix a Lab lightness $L^*$. The library uses the regular 256-gon centered on the
+Fix a Lab lightness $L^{*}$. The library uses the regular 256-gon centered on the
 neutral axis, anchored at angle $\frac{3\pi}{2}$ (the $-b$ direction):
 
 $$
-v_k = \left(L^*,\; r(L^*)\cos\theta_k,\; r(L^*)\sin\theta_k\right),
+v_k = \left(L^{*},\; r(L^{*})\cos\theta_k,\; r(L^{*})\sin\theta_k\right),
 \qquad
 \theta_k = \frac{3\pi}{2} + \frac{2\pi k}{256},
 \qquad k = 0,\dots,255.
@@ -199,7 +199,7 @@ $$
 The radius is the largest value such that all 256 vertices remain inside sRGB:
 
 $$
-r(L^*) = \min_{0 \le k < 256} \sup\!\left\{ r \ge 0 : v_k(r) \in \text{sRGB} \right\}.
+r(L^{*}) = \min_{0 \le k < 256} \sup\left\lbrace r \ge 0 : v_k(r) \in \text{sRGB} \right\rbrace.
 $$
 
 Each per-direction boundary is found in closed form. The Lab → linear RGB
@@ -222,7 +222,7 @@ All 256 rotations of this pattern give the 256 palettes returned by
 
 ### 3. Hungarian matching
 
-Given $n$ input colors projected to $(a_i, b_i)$ on the constant-$L^*$ plane,
+Given $n$ input colors projected to $(a_i, b_i)$ on the constant-$L^{*}$ plane,
 and a candidate palette $\{v_0, \dots, v_{n-1}\}$, the cost matrix is the
 planar Lab distance:
 
@@ -238,10 +238,10 @@ from the rotation with the smallest total cost.
 ### 4. Gray mapping
 
 The gray mapping in `matchGrays` is a linear remap of a color's Lab lightness
-$L^*_{\text{in}} \in [0, 100]$ into the requested range $[L, \text{reference}]$:
+$L^{*}_{\text{in}} \in [0, 100]$ into the requested range $[L, \text{reference}]$:
 
 $$
-L_{\text{out}} = L + \frac{L^*_{\text{in}}}{100} \cdot (\text{reference} - L).
+L_{\text{out}} = L + \frac{L^{*}_{\text{in}}}{100} \cdot (\text{reference} - L).
 $$
 
 The output color is the neutral Lab point $(L_{\text{out}}, 0, 0)$ converted
