@@ -1,4 +1,3 @@
-npm i -g yaml-language-server @ansible/ansible-language-server
 # bash
 npm i -g bash-language-server
 if ! command -v shfmt; then
@@ -24,6 +23,9 @@ if ! command -v yamlfmt; then
 	curl -L https://github.com/google/yamlfmt/releases/download/v0.21.0/yamlfmt_0.21.0_Linux_${ARCH}.tar.gz |
 		tar -xzf - -C /usr/local/bin yamlfmt
 fi
+
+# json
+npm i -g vscode-langservers-extracted
 
 # typescript
 npm i -g typescript-language-server @biomejs/biome

@@ -5,8 +5,8 @@ grayscale mappings from the CIE Lab color space.
 
 The core idea: for a given lightness `L*`, inscribe the largest regular 256-gon
 on the constant-`L*` plane that fits inside the sRGB gamut. Subsets of that
-polygon are maximally spread color palettes. All public APIs return `[r, g, b]`
-tuples — Lab is internal machinery.
+polygon are maximally spread color palettes. All public APIs use `RgbColor`
+(`{ r, g, b }` integers in `[0, 255]`) — Lab is internal machinery.
 
 ## Install
 
@@ -17,167 +17,78 @@ npm install miniature-waffle
 ## API
 
 ```ts
-import {
-  findPalettes,
-  matchColors,
-  matchGrays,
-  matchAnsiColors,
-  matchAnsiGrays,
-} from "miniature-waffle";
-```
-
-All channel values are integers in `[0, 255]`. `RgbTuple` is `[r, g, b]`.
-
----
-
-### `findPalettes(L, n)`
-
-Returns all 256 rotations of an `n`-color palette at lightness `L`.
-
-```ts
-findPalettes(L: number, n: number): RgbTuple[][]
-```
-
-- `L` — finite number in `(0, 100)` exclusive
-- `n` — integer in `[1, 256]`
-
-Each palette is a Bresenham-distributed `n`-gon on the 256-gon at `L`. The 256
-returned palettes are cyclic rotations of the same gap pattern — consecutive
-palettes are offset by one step around the circle.
-
-```ts
-const palettes = findPalettes(50, 3);
-// 256 palettes, each with 3 RgbTuples
-const [r, g, b] = palettes[0][0]; // first color of first palette
+import { matchColors, matchGrays } from "miniature-waffle";
 ```
 
 ---
 
-### `matchColors(colors, L)`
-
-Matches a set of input colors to the best-fit palette on the constant-`L` plane
-using the Hungarian algorithm.
+### `matchColors(input, L?)`
 
 ```ts
-matchColors(colors: RgbTuple[], L: number): ColorMatch[]
+matchColors(n: number, L?: number): RgbColor[][]
+matchColors(colors: RgbColor[], L?: number): RgbColor[]
 ```
 
-- `colors` — 1 to 256 entries; no color may lie on the Lab gray axis
-- `L` — finite number in `(0, 100)` exclusive
+- `n` or `colors` — integer `n ∈ [1, 256]`, or 1–256 `RgbColor` entries
+- `L` — finite number in `[0, 100]`, default `75`
 
-For each input color the algorithm:
-
-1. Converts to Lab and reads off `(a, b)`, discarding the input's own lightness
-2. Builds every Bresenham-distributed `n`-gon palette on the 256-gon at `L`
-3. Runs the Hungarian algorithm on each rotation and keeps the one with minimum
-   total `(a, b)`-plane distance
-4. Returns the matched palette color for each input
+**n-gon mode** — returns all 256 Bresenham rotations of an `n`-color palette at
+lightness `L`. At `L=0` or `L=100` all palettes contain `n` blacks or whites.
 
 ```ts
-interface ColorMatch {
-  input: RgbTuple;  // the original input color
-  match: RgbTuple;  // the palette color assigned to it
-}
+const palettes = matchColors(3);         // 256 palettes of 3 colors at L=75
+const palettes50 = matchColors(3, 50);   // same at L=50
+const { r, g, b } = palettes[0][0];
 ```
 
-Colors with `a = b = 0` in Lab (pure black `[0, 0, 0]`) throw a `RangeError`.
+**Color matching mode** — projects each input color onto the constant-`L` plane,
+finds the Bresenham `n`-gon rotation with minimum total `(a, b)`-plane distance
+via the Hungarian algorithm, returns one matched palette color per input.
+Colors on the Lab gray axis (`a = b = 0`) throw a `RangeError`.
 
 ```ts
-const results = matchColors([[255, 0, 0], [0, 128, 255]], 75);
-results[0].input;  // [255, 0, 0]
-results[0].match;  // closest palette color at L=75
+const matches = matchColors([{ r: 255, g: 0, b: 0 }, { r: 0, g: 128, b: 255 }]);
+matches[0];  // palette color assigned to { r: 255, g: 0, b: 0 }
+matches[1];  // palette color assigned to { r: 0, g: 128, b: 255 }
 ```
 
 ---
 
-### `matchGrays(input, L, reference)`
-
-Maps colors or evenly-spaced steps onto the Lab gray axis between `L` and
-`reference`.
+### `matchGrays(input, startL?, endL?)`
 
 ```ts
-matchGrays(input: number | RgbTuple[], L: number, reference: number): RgbTuple[]
+matchGrays(input: number | RgbColor[], startL?: number, endL?: number): RgbColor[]
 ```
 
-- `L` — finite number in `[0, 100]`
-- `reference` — finite number in `[0, 100]`, must differ from `L`
+- `input` — integer `n ∈ [1, 256]`, or a `RgbColor[]`
+- `startL` — finite number in `[0, 100]`, default `0`
+- `endL` — finite number in `[0, 100]`, default `100`
 
-`L` is the dark endpoint, `reference` is the light endpoint. A color's input
-luminance `L*_in ∈ [0, 100]` maps linearly to the output range:
+Maps colors or evenly-spaced steps onto the Lab gray axis between `startL` and
+`endL`. A color's luminance `L*_in ∈ [0, 100]` maps linearly:
 
 $$
-L_{\text{out}} = L + \frac{L^{\ast}_{\text{in}}}{100} \cdot (\text{reference} - L)
+L_{\text{out}} = \text{startL} + \frac{L^{\ast}_{\text{in}}}{100} \cdot (\text{endL} - \text{startL})
 $$
 
-**Step mode** — `input` is an integer `n ∈ [1, 256]`: returns `n` neutral grays
-evenly spaced from `L` (at `L*_in = 0`) to `reference` (at `L*_in = 100`).
+`startL === endL` is valid and collapses all outputs to the same gray.
+Swap `startL` and `endL` to invert the direction.
+
+**Step mode** — `input` is an integer `n`: returns `n` neutral grays evenly
+spaced from `startL` to `endL`.
 
 ```ts
-matchGrays(2, 0, 100);   // [[0,0,0], [255,255,255]]
-matchGrays(2, 100, 0);   // [[255,255,255], [0,0,0]]
-matchGrays(5, 20, 80);   // 5 grays spanning L*=20 to L*=80
+matchGrays(2);            // [black, white]
+matchGrays(2, 100, 0);    // [white, black]
+matchGrays(5, 20, 80);    // 5 grays spanning L*=20 to L*=80
 ```
 
-**Projection mode** — `input` is a `RgbTuple[]`: extracts each color's
-luminance `L*_in` via `rgbToLab`, maps it with the formula above, returns
-`(L_out, 0, 0)` as RGB.
+**Projection mode** — `input` is a `RgbColor[]`: maps each color to a gray at
+its luminance within `[startL, endL]`.
 
 ```ts
-matchGrays([[255, 0, 0], [0, 128, 0]], 0, 100);
+matchGrays([{ r: 255, g: 0, b: 0 }, { r: 0, g: 128, b: 0 }]);
 // red and green projected to grays at their respective luminances
-```
-
----
-
-### `matchAnsiColors(L)`
-
-Applies `matchColors` to the 12 chromatic ANSI terminal colors at lightness `L`.
-
-```ts
-matchAnsiColors(L: number): NamedColorMatch[]
-```
-
-```ts
-interface NamedColorMatch {
-  name: string;
-  match: RgbTuple;
-}
-```
-
-The 12 colors (the 4 neutral grays — black, white, brightBlack, brightWhite —
-are excluded since they lie on the gray axis):
-
-| name | original |
-|---|---|
-| red | `[128, 0, 0]` |
-| green | `[0, 128, 0]` |
-| yellow | `[128, 128, 0]` |
-| blue | `[0, 0, 128]` |
-| magenta | `[128, 0, 128]` |
-| cyan | `[0, 128, 128]` |
-| brightRed | `[255, 0, 0]` |
-| brightGreen | `[0, 255, 0]` |
-| brightYellow | `[255, 255, 0]` |
-| brightBlue | `[0, 0, 255]` |
-| brightMagenta | `[255, 0, 255]` |
-| brightCyan | `[0, 255, 255]` |
-
----
-
-### `matchAnsiGrays(L, reference)`
-
-Applies `matchGrays` (projection mode) to all 16 ANSI terminal colors.
-
-```ts
-matchAnsiGrays(L: number, reference: number): NamedColorMatch[]
-```
-
-Returns 16 `NamedColorMatch` entries in ANSI order (black → … → brightWhite),
-each mapped to a neutral gray at its luminance within `[L, reference]`.
-
-```ts
-matchAnsiGrays(0, 100);
-// black → [0,0,0], brightWhite → [255,255,255], colors in between by luminance
 ```
 
 ---
@@ -218,7 +129,7 @@ $$
 
 then the gap sequence has $n - s$ gaps of size $q$ and $s$ gaps of size $q + 1$.
 All 256 rotations of this pattern give the 256 palettes returned by
-`findPalettes`.
+`matchColors` in n-gon mode.
 
 ### 3. Hungarian matching
 
@@ -238,32 +149,30 @@ from the rotation with the smallest total cost.
 ### 4. Gray mapping
 
 The gray mapping in `matchGrays` is a linear remap of a color's Lab lightness
-$L^{\ast}_{\text{in}} \in [0, 100]$ into the requested range $[L, \text{reference}]$:
+$L^{\ast}_{\text{in}} \in [0, 100]$ into the requested range $[\text{startL}, \text{endL}]$:
 
 $$
-L_{\text{out}} = L + \frac{L^{\ast}_{\text{in}}}{100} \cdot (\text{reference} - L).
+L_{\text{out}} = \text{startL} + \frac{L^{\ast}_{\text{in}}}{100} \cdot (\text{endL} - \text{startL}).
 $$
 
 The output color is the neutral Lab point $(L_{\text{out}}, 0, 0)$ converted
 back to sRGB. For step mode with $n$ steps, the input luminances are
 $0, \frac{100}{n-1}, \frac{200}{n-1}, \dots, 100$ (i.e. $\frac{100i}{n-1}$ for
-$i = 0, \dots, n-1$), with $n = 1$ returning just $L_{\text{out}} = L$.
+$i = 0, \dots, n-1$), with $n = 1$ returning just $L_{\text{out}} = \text{startL}$.
 
 ## Repo structure
 
 ```
 src/
   index.ts             — public entry point
-  paletteFinder.ts     — findPalettes
-  colorMatcher.ts      — matchColors, matchGrays, matchAnsiColors, matchAnsiGrays
-  types.ts             — RgbTuple, ColorMatch, NamedColorMatch (+ internal Lab/Rgb)
+  colorMatcher.ts      — matchColors, matchGrays
+  types.ts             — RgbColor (+ internal Lab)
   helpers/
     radiusFinder.ts    — exact 256-gon radius via polynomial root-finding
-    bresehham.ts       — Bresenham integer gap distribution
+    bresenham.ts       — Bresenham integer gap distribution
     hungarian.ts       — O(n³) Kuhn-Munkres assignment
     converters.ts      — sRGB ↔ CIE Lab
 tests/
-  paletteFinder.spec.ts
   colorMatcher.spec.ts
   helpers.spec.ts
 ```

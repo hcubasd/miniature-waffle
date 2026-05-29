@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	buildEvenGaps,
 	buildIndicesFromGaps,
-} from "../src/helpers/bresehham.ts";
+} from "../src/helpers/bresenham.ts";
 import { labToRgb, rgbToLab } from "../src/helpers/converters.ts";
 
 describe("buildEvenGaps", () => {
