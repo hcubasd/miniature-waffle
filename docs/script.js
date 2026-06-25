@@ -116,8 +116,9 @@ function resize() {
 
 window.addEventListener("resize", resize);
 
-// — Download (always landscape 2:1) —
-document.getElementById("download-btn").addEventListener("click", () => {
+// — Download (always landscape 2:1): click the canvas —
+canvas.style.cursor = "pointer";
+canvas.addEventListener("click", () => {
   const input = prompt("Width in pixels:");
   if (!input) return;
   const w = Math.round(Number(input));

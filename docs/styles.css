@@ -18,11 +18,3 @@ canvas {
   left: 50%;
   /* transform set by JS: translate(-50%,-50%) [rotate(90deg) in portrait] */
 }
-
-#download-btn {
-  position: fixed;
-  bottom: 1em;
-  right: 1em;
-  padding: 1em;
-  border-radius: 1em;
-}
